@@ -154,6 +154,157 @@ user_id = cl.user_id_from_username("mrbeast")  # uses RapidAPI
 
 When `rapidapi_key` is not set, `user_id_from_username()` falls back to the Instagram private API as before.
 
+---
+
+## Hiip Workflow — Gửi & Nhận Instagram DM
+
+Đây là hướng dẫn end-to-end để gửi/nhận DM Instagram dùng cookie-based auth (không cần password).
+
+### 1. Cài đặt
+
+```bash
+pip install git+https://github.com/HiipAi-Agents/instagrapi.git
+```
+
+Hoặc local:
+
+```bash
+pip install -e /path/to/instagrapi
+```
+
+### 2. Lấy cookies từ browser
+
+1. Vào [instagram.com](https://www.instagram.com) → đăng nhập tài khoản cần dùng
+2. Cài extension **Cookie-Editor** ([Chrome](https://chromewebstore.google.com/detail/cookie-editor/hlkenndednhfkekhgcdicdfddnkalmdm) / [Firefox](https://addons.mozilla.org/en-US/firefox/addon/cookie-editor/))
+3. Click icon extension → **Export** → **Export as JSON**
+4. Save file, ví dụ `cookies_ig.json`
+
+Format file kỳ vọng:
+
+```json
+[
+  { "name": "sessionid", "value": "8195986836%3AKBG68ot1...", "domain": ".instagram.com" },
+  { "name": "csrftoken", "value": "g7jIWkmY..." },
+  { "name": "ds_user_id", "value": "8195986836" }
+]
+```
+
+Cookie `sessionid` được extract tự động — các cookie khác không bắt buộc.
+
+### 3. Khởi tạo client
+
+```python
+from instagrapi import Client
+
+# Truyền rapidapi_key để resolve username → user_id nhanh hơn (không cần session IG)
+client = Client(rapidapi_key="YOUR_RAPIDAPI_KEY")
+client.login_from_cookie_file("cookies_ig.json")
+
+print("Logged in as:", client.username)
+```
+
+Lấy RapidAPI key tại [rapidapi.com → social-api4](https://rapidapi.com/social-api4-social-api4-default/api/social-api4) (có free tier).
+
+### 4. Gửi DM
+
+#### Gửi cho user mới (lần đầu)
+
+Instagram tự động tạo thread mới nếu chưa tồn tại, hoặc reuse thread cũ.
+
+```python
+# Resolve user_id từ username (dùng RapidAPI nếu có rapidapi_key)
+user_id = client.user_id_from_username("target_username")
+
+msg = client.direct_send("Xin chào từ Hiip! 👋", user_ids=[user_id])
+print("Sent, thread_id:", msg.thread_id)
+```
+
+Tin nhắn sẽ vào **inbox chính** nếu target đã follow sender, hoặc **Message Requests** nếu chưa có quan hệ follow (target phải Accept mới reply được).
+
+#### Reply vào thread có sẵn
+
+```python
+client.direct_send("Đây là tin tiếp theo.", thread_ids=[msg.thread_id])
+```
+
+#### Gửi hàng loạt
+
+```python
+usernames = ["user1", "user2", "user3"]
+
+for username in usernames:
+    try:
+        user_id = client.user_id_from_username(username)
+        msg = client.direct_send(f"Xin chào @{username}!", user_ids=[user_id])
+        print(f"✓ {username}: thread {msg.thread_id}")
+    except Exception as e:
+        print(f"✗ {username}: {e}")
+```
+
+### 5. Lắng nghe tin nhắn đến (Realtime)
+
+Dùng `RealtimeClient` — kết nối MQTT đến `edge-mqtt.facebook.com:443`.
+
+```python
+from instagrapi import Client
+
+client = Client()
+client.login_from_cookie_file("cookies_ig.json")
+
+def on_message(data):
+    msg = data.get("message", {})
+    thread_id = msg.get("thread_id")
+    text = msg.get("text")
+    sender_id = msg.get("user_id")
+    print(f"[Thread {thread_id}] {sender_id}: {text}")
+
+    # Auto-reply ví dụ
+    if text and "hello" in text.lower():
+        client.direct_send("Xin chào! Cảm ơn đã liên hệ Hiip 👋", thread_ids=[thread_id])
+
+def on_typing(data):
+    print("Typing:", data.get("thread_id"))
+
+def on_seen(data):
+    print("Seen:", data.get("thread_id"))
+
+client.realtime_on("message", on_message)
+client.realtime_on("typing", on_typing)
+client.realtime_on("seen", on_seen)
+
+rt = client.realtime_connect()
+rt.direct_subscribe()   # sync seq_id từ inbox, tránh bỏ sót tin cũ
+
+print(f"Listening as @{client.username} ...")
+while True:
+    client.realtime_read_once()
+```
+
+Events hỗ trợ: `message`, `thread_update`, `typing`, `seen`, `presence`, `receive` (raw).
+
+### 6. Đổi account
+
+Chỉ cần đổi file cookies — không cần thay đổi code:
+
+```python
+client.login_from_cookie_file("cookies_account_b.json")
+print("Now logged in as:", client.username)
+```
+
+### Giới hạn & lưu ý
+
+| Vấn đề | Chi tiết |
+|---|---|
+| Cookie hết hạn | `sessionid` thường hạn ~1 năm. Khi hết, export lại từ browser |
+| Rate limit | Gửi nhiều DM nhanh → Instagram tạm block tài khoản. Thêm `time.sleep()` giữa các request |
+| Message Requests | Tin đến người lạ nằm ở Requests, target phải Accept trước khi reply |
+| Realtime là blocking | Trong production, chạy `realtime_read_once()` trong `threading.Thread` riêng |
+| `sessionid` từ browser | Đôi khi bị reject bởi private mobile API (khác user-agent). Nếu bị `login_required`, dùng `login()` với password một lần rồi `dump_settings()` |
+
+Chi tiết kỹ thuật đầy đủ: [IG_Message_SOLUTION.md](IG_Message_SOLUTION.md)
+
+---
+
 ## Typical Tasks
 
 ### List and download another user's posts
