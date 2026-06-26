@@ -125,6 +125,35 @@ cl.login_by_sessionid("<your_sessionid>")
 
 If a browser/web `sessionid` returns `login_required` or logs the browser out, Instagram rejected that session for the private mobile API. Use a stable password login once, save settings with `dump_settings()`, and reuse those settings instead of repeatedly importing browser cookies.
 
+### Login from browser cookie file
+
+Export cookies from your browser using [Cookie-Editor](https://cookie-editor.com/) (Chrome/Firefox) and log in directly from the JSON file:
+
+```python
+from instagrapi import Client
+
+cl = Client()
+cl.login_from_cookie_file("cookies_ig.json")
+print("Logged in as:", cl.username)
+```
+
+The file must be in the browser extension export format — a JSON array of cookie objects, each with `name` and `value` fields. The `sessionid` cookie is extracted automatically.
+
+### Resolve user_id via RapidAPI
+
+`user_id_from_username()` can resolve a username to a numeric user ID through [social-api4.p.rapidapi.com](https://rapidapi.com/social-api4-social-api4-default/api/social-api4) without consuming an Instagram API request. Pass `rapidapi_key` when constructing `Client`:
+
+```python
+from instagrapi import Client
+
+cl = Client(rapidapi_key="<your_rapidapi_key>")
+cl.login_from_cookie_file("cookies_ig.json")
+
+user_id = cl.user_id_from_username("mrbeast")  # uses RapidAPI
+```
+
+When `rapidapi_key` is not set, `user_id_from_username()` falls back to the Instagram private API as before.
+
 ## Typical Tasks
 
 ### List and download another user's posts

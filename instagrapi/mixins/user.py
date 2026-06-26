@@ -4,6 +4,7 @@ from copy import deepcopy
 from json.decoder import JSONDecodeError
 from typing import Dict, Iterator, List, Literal, Optional, Sequence, Tuple, Union
 
+import requests
 from requests.exceptions import RequestException
 
 from instagrapi.exceptions import (
@@ -45,6 +46,10 @@ USER_REPORT_REASON = Literal["spam"]
 UserBlockSurface = Literal["profile", "direct_thread_info"]
 
 
+RAPIDAPI_KEY = None
+RAPIDAPI_HOST = "social-api4.p.rapidapi.com"
+
+
 class UserMixin:
     """
     Helpers to manage user
@@ -56,6 +61,7 @@ class UserMixin:
     _users_following = {}  # user_pk -> dict(user_pk -> "short user object")
     _users_followers = {}  # user_pk -> dict(user_pk -> "short user object")
     _fb_dtsg = None
+    rapidapi_key: Optional[str] = None
 
     @staticmethod
     def _normalize_username(username: str) -> str:
@@ -80,9 +86,31 @@ class UserMixin:
                 raise e
             return self.user_info_gql(user_id)
 
+    def user_id_from_username_rapidapi(self, username: str) -> str:
+        """
+        Get user_id from username via RapidAPI (social-api4.p.rapidapi.com).
+        Requires self.rapidapi_key to be set.
+        """
+        resp = requests.get(
+            "https://social-api4.p.rapidapi.com/v1/info",
+            params={"username_or_id_or_url": username},
+            headers={
+                "x-rapidapi-key": self.rapidapi_key,
+                "x-rapidapi-host": RAPIDAPI_HOST,
+            },
+            timeout=10,
+        )
+        resp.raise_for_status()
+        data = resp.json().get("data") or {}
+        user_id = data.get("id")
+        if not user_id:
+            raise UserNotFound(username=username)
+        return str(user_id)
+
     def user_id_from_username(self, username: str) -> str:
         """
-        Get full media id
+        Get user PK from username.
+        Uses RapidAPI if self.rapidapi_key is set, otherwise falls back to Instagram API.
 
         Parameters
         ----------
@@ -99,6 +127,8 @@ class UserMixin:
         'example' -> 1903424587
         """
         username = self._normalize_username(username)
+        if self.rapidapi_key:
+            return self.user_id_from_username_rapidapi(username)
         return str(self.user_info_by_username(username).pk)
 
     def user_short_gql(self, user_id: str, use_cache: bool = True) -> UserShort:

@@ -106,6 +106,7 @@ class Client(
         delay_range: Optional[list] = None,
         logger=DEFAULT_LOGGER,
         override_app_version: bool = False,
+        rapidapi_key: Optional[str] = None,
         **kwargs,
     ):
         self.tls_verify = kwargs.pop("tls_verify", True)
@@ -125,6 +126,7 @@ class Client(
         self.override_app_version = override_app_version
         self.logger = logger
         self.delay_range = delay_range
+        self.rapidapi_key = rapidapi_key
 
         self.set_proxy(proxy)
 

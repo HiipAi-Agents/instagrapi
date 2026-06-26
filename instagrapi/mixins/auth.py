@@ -961,6 +961,29 @@ class LoginMixin(PreLoginFlowMixin, PostLoginFlowMixin):
         self.init()
         return True
 
+    def login_from_cookie_file(self, path: Union[str, Path]) -> bool:
+        """
+        Login using a browser-exported cookie JSON file (EditThisCookie / Cookie-Editor format).
+        Extracts sessionid from the cookie list and calls login_by_sessionid.
+
+        Parameters
+        ----------
+        path: str or Path
+            Path to the JSON cookie file
+
+        Returns
+        -------
+        bool
+            True if login succeeded
+        """
+        with open(path, "r") as f:
+            cookies = json.load(f)
+        cookie_map = {c["name"]: c["value"] for c in cookies if "name" in c and "value" in c}
+        sessionid = cookie_map.get("sessionid")
+        if not sessionid:
+            raise ValueError("sessionid not found in cookie file")
+        return self.login_by_sessionid(sessionid)
+
     def load_settings(self, path: Union[str, Path], override_app_version: bool = False) -> Dict:
         """
         Load session settings
