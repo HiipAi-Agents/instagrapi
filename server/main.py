@@ -27,7 +27,7 @@ from pydantic import BaseModel
 from account_manager import AccountManager, IGMessage
 
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.WARNING,
     format="%(asctime)s %(levelname)s %(name)s: %(message)s",
 )
 log = logging.getLogger("ig-sidecar")
@@ -67,9 +67,11 @@ def _on_message(msg: IGMessage) -> None:
             "thread_id": msg.thread_id,
             "item_id": msg.item_id,
             "user_id": msg.user_id,
+            "uid": msg.uid,
             "text": msg.text,
             "timestamp": msg.timestamp,
             "is_group": msg.is_group,
+            "is_self": msg.is_self,
         },
     )
 
